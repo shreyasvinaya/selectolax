@@ -146,10 +146,10 @@ def make_extensions():
 
 setup(
     name='selectolax',
-    version='0.3.8',
+    version='0.3.9',
     description="Fast HTML5 parser with CSS selectors.",
     long_description=readme,
-    author="Artem Golubin",
+    author="Shreyas V, Artem Golubin",
     author_email='me@rushter.com',
     url='https://github.com/rushter/selectolax',
     packages=find_packages(include=['selectolax']),

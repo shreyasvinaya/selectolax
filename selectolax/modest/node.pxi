@@ -3,9 +3,14 @@ cimport cython
 from libc.stdlib cimport free
 from libc.stdlib cimport malloc
 from libc.stdlib cimport realloc
+#from libcpp.vector cimport vector
+from cpython cimport array
+import array
 
+#cimport cqueue
 DEF _STACK_SIZE = 100
 DEF _ENCODING = 'UTF-8'
+DEF _QUEUE_SIZE = 100
 
 @cython.final
 cdef class Stack:
@@ -33,8 +38,73 @@ cdef class Stack:
     cdef resize(self):
         self.capacity *= 2
         self._stack = <myhtml_tree_node_t**> realloc(<void*> self._stack, self.capacity * sizeof(myhtml_tree_node_t))
+'''
+cdef class Queue:
+    """A queue class for C integer values.
+
+    >>> q = Queue()
+    >>> q.append(5)
+    >>> q.peek()
+    5
+    >>> q.pop()
+    5
+    """
+    cdef cqueue.Queue* _c_queue
+    def __cinit__(self):
+        self._c_queue = cqueue.queue_new()
+        if self._c_queue is NULL:
+            raise MemoryError()
+
+    def __dealloc__(self):
+        if self._c_queue is not NULL:
+            cqueue.queue_free(self._c_queue)
 
 
+    cpdef append(self, int value):
+        if not cqueue.queue_push_tail(self._c_queue,
+                                      <void*> <Py_ssize_t> value):
+            raise MemoryError()
+
+    # The `cpdef` feature is obviously not available for the original "extend()"
+    # method, as the method signature is incompatible with Python argument
+    # types (Python does not have pointers).  However, we can rename
+    # the C-ish "extend()" method to e.g. "extend_ints()", and write
+    # a new "extend()" method that provides a suitable Python interface by
+    # accepting an arbitrary Python iterable.
+
+    cpdef extend(self, values):
+        for value in values:
+            self.append(value)
+
+
+    cdef extend_ints(self, int* values, size_t count):
+        cdef int value
+        for value in values[:count]:  # Slicing pointer to limit the iteration boundaries.
+            self.append(value)
+
+
+
+    cpdef int peek(self) except? -1:
+        cdef int value = <Py_ssize_t> cqueue.queue_peek_head(self._c_queue)
+
+        if value == 0:
+            # this may mean that the queue is empty,
+            # or that it happens to contain a 0 value
+            if cqueue.queue_is_empty(self._c_queue):
+                raise IndexError("Queue is empty")
+        return value
+
+
+
+    cpdef int pop(self) except? -1:
+        if cqueue.queue_is_empty(self._c_queue):
+            raise IndexError("Queue is empty")
+        return <Py_ssize_t> cqueue.queue_pop_head(self._c_queue)
+
+    def __bool__(self):
+        return not cqueue.queue_is_empty(self._c_queue)
+    
+'''
 cdef class _Attributes:
     """A dict-like object that represents attributes."""
     cdef myhtml_tree_node_t * node
@@ -359,6 +429,255 @@ cdef class Node:
 
             if current_node.child is not NULL:
                 stack.push(current_node.child)
+    
+    
+    def find_root_node(self):
+        """Find the root node of the tree.
+
+        Returns
+        -------
+        node : Node
+        """
+        cdef myhtml_tree_node_t *node = self.node
+
+        while node.parent != NULL:
+            node = node.parent
+        cdef Node op = Node()
+        op._init(node, self.parser)
+        return op
+
+    def find_all_next(self, name=None,attrs=None, text=None, limit=None ):
+        """Find all next nodes that match the given criteria.
+
+        Parameters
+        ----------
+        name : str, optional
+            The name of the tag to find.
+        attrs : dict, optional
+            The attributes to find.
+        text : str, optional
+            The text to find.
+        limit : int, optional
+            The maximum number of nodes to find.
+
+        Returns
+        -------
+        nodes : list of Node objects
+        """
+
+        cdef list op=[]
+        #cdef myhtml_tree_node_t* current_node = NULL
+        cdef myhtml_tree_node_t* node = self.node
+        cdef Node root
+        cdef Node root2
+
+        root2 = Node()
+        root2._init(self.node, self.parser)
+        root = Node()
+        root._init(self.node, self.parser)
+        
+        while node.parent != NULL:
+            node = node.parent
+        
+        cdef Stack stack = Stack(_STACK_SIZE)
+        cdef myhtml_tree_node_t* current_node = NULL;
+        cdef Node next_node;
+        '''
+        print(self.node)
+        print(type(root2))
+        print(root2.node)
+        '''
+
+        stack.push(node)
+        
+        cdef list traversal_order = []
+        
+        #cdef Queue q = Queue(_QUEUE_SIZE)
+        while not stack.is_empty():
+            current_node = stack.pop()
+            if current_node != NULL and not (current_node.tag_id == MyHTML_TAG__TEXT):
+                next_node = Node()
+                next_node._init(current_node, self.parser)
+                #cdef array.array n_node = array.array('i', [next_node])
+                traversal_order.append(next_node)
+
+            if current_node.next is not NULL:
+                stack.push(current_node.next)
+
+            if current_node.child is not NULL:
+                stack.push(current_node.child)
+        
+        #for i in stack:
+        #    print(i)
+        
+        #cdef list temp = [i for i in root2.traverse()]
+        #temp = [i for i in root.traverse()]
+        cdef int flag = 0
+        
+        flag = traversal_order.index(root)
+        for i in traversal_order[flag+1:]:
+            if name is None or i.tag == name:
+                if attrs is None or all(item in i.attributes.items() for item in attrs.items()): #set(attrs.items()).issubset(set(i.attributes.items())):
+                    #print(i.text(deep = False))
+                    if text is None or i.text(deep = False) == text:
+                        #yield i
+                        #op.append(i)
+                        if limit is not None and limit>0: #len(op) >= limit:
+                            limit = limit - 1
+                            yield i
+                            #break
+        '''
+        for i in traversal_order:
+            if i == root:
+                flag = 1
+                continue
+            if flag == 1:
+                if name is None or i.tag == name:
+                    if attrs is None or all(item in i.attributes.items() for item in attrs.items()): #set(attrs.items()).issubset(set(i.attributes.items())):
+                        #print(i.text(deep = False))
+                        if text is None or i.text(deep = False) == text:
+                            op.append(i)
+                            if limit is not None and len(op) >= limit:
+                                break
+        '''
+        #cdef str t
+        #return op
+        '''
+                if name and not attrs:
+                    if i.tag == name:
+                        op.append(i)
+                if attrs:
+                    if i.tag == name:
+                        if self._has_attributes(i, attrs)==True:
+                            op.append(i)
+                if not name and not attrs:
+                    op.append(i)
+        
+        if text:
+            op = [i for i in op if text == i.text(deep=False)]
+
+
+        if limit:
+            return op[:limit]
+        else:
+            return op
+        '''
+
+    def find_all_previous(self, name=None, attrs=None, text=None, limit=None ):
+        """Find all previous nodes that match the given criteria.
+
+        Parameters
+        ----------
+        name : str, optional
+            The name of the tag to find.
+        attrs : dict, optional
+            The attributes to find.
+        text : str, optional
+            The text to find.
+        limit : int, optional
+            The maximum number of nodes to find.
+
+        Returns
+        -------
+        nodes : list of Node objects
+        """
+
+        cdef list op=[]
+        #cdef myhtml_tree_node_t* current_node = NULL
+        cdef myhtml_tree_node_t* node = self.node
+        cdef Node root
+        cdef Node root2
+
+        root2 = Node()
+        root2._init(self.node, self.parser)
+        root = Node()
+        root._init(self.node, self.parser)
+        
+        while node.parent != NULL:
+            node = node.parent
+        
+        cdef Stack stack = Stack(_STACK_SIZE)
+        cdef myhtml_tree_node_t* current_node = NULL;
+        cdef Node next_node;
+
+        stack.push(node)
+        
+        cdef list traversal_order = []
+        
+        #cdef Queue q = Queue(_QUEUE_SIZE)
+        while not stack.is_empty():
+            current_node = stack.pop()
+            if current_node != NULL and not (current_node.tag_id == MyHTML_TAG__TEXT):
+                next_node = Node()
+                next_node._init(current_node, self.parser)
+                #cdef array.array n_node = array.array('i', [next_node])
+                traversal_order.append(next_node)
+
+            if current_node.next is not NULL:
+                stack.push(current_node.next)
+
+            if current_node.child is not NULL:
+                stack.push(current_node.child)
+        cdef int flag = 0
+        
+        flag = traversal_order.index(root)
+        for i in reversed(traversal_order[0:flag]):
+            #print(i.tag)
+            if name is None or i.tag == name:
+                if attrs is None or all(item in i.attributes.items() for item in attrs.items()): #set(attrs.items()).issubset(set(i.attributes.items())):
+                    #print(i.text(deep = False))
+                    if text is None or i.text(deep = False) == text:
+                        #op.append(i)
+                        if limit is not None and limit>0: #len(op) >= limit:
+                            limit = limit - 1
+                            yield i
+                            continue
+                        break
+
+        #cdef str t
+        return op
+
+    def parents(self, name=None, attrs=None, limit=None, **kwargs):
+        """Find all parents that match the given criteria.
+
+        Parameters
+        ----------
+        name : str, optional
+            The name of the tag to find.
+        attrs : dict, optional
+            The attributes to find.
+        limit : int, optional
+            The maximum number of nodes to find.
+
+        Returns
+        -------
+        nodes : list of Node objects
+        """
+
+        cdef list op=[]
+        #cdef myhtml_tree_node_t* current_node = NULL
+        cdef myhtml_tree_node_t* node = self.node
+        cdef Node root
+        cdef Node root2
+        #cdef int limit
+        
+        while node.parent:
+            node = node.parent
+            root = Node()
+            root._init(node, self.parser)
+            #print(root.tag)
+            if name is None or root.tag == name:
+                if attrs is None or all(item in root.attributes.items() for item in attrs.items()):
+                    #print(root.attributes)
+                    if limit is not None and limit>0: #len(op) >= limit:
+                        limit = limit - 1
+                        #root2 = root()
+                        #root2._init(self.root, self.parser)
+                        yield root
+            continue
+        return op
+        
+
 
     @property
     def tag(self):
