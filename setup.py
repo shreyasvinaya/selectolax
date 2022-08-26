@@ -150,8 +150,8 @@ setup(
     description="Fast HTML5 parser with CSS selectors.",
     long_description=readme,
     author="Shreyas V, Artem Golubin",
-    author_email='me@rushter.com',
-    url='https://github.com/rushter/selectolax',
+    author_email='shreyas.college@gmail.com',
+    url='https://github.com/shreyasvinaya/selectolax',
     packages=find_packages(include=['selectolax']),
     include_package_data=True,
     install_requires=['Cython>=0.29.23', ],
@@ -178,7 +178,7 @@ setup(
         'pytest',
     ],
     project_urls={
-        "Source code": "https://github.com/rushter/selectolax",
+        "Source code": "https://github.com/shreyasvinaya/selectolax",
     },
     ext_modules=make_extensions(),
 )
