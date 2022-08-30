@@ -430,7 +430,25 @@ cdef class Node:
             if current_node.child is not NULL:
                 stack.push(current_node.child)
     
-    
+    def find_all_custom(self, str query, str text):
+        """ Find all nodes with given text and query
+
+        Returns
+        -------
+        list : Nodes
+
+        """
+
+        cdef list op = []
+        op = find_nodes(self.parser, self.node, query)
+        #cdef list op_return = []
+        if text:
+            for node in op:
+                if node.text(deep = False) == text:
+                    yield node
+
+
+
     def find_root_node(self):
         """Find the root node of the tree.
 
